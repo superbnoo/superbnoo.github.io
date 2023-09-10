@@ -1,8 +1,5 @@
 ---
-title: My page
 layout: default
+title: Home
 ---
-
-# {{ page.title }}
-
-Content is written in Markdown
+<h1>{{ "Hello World!" | downcase }}</h1>
