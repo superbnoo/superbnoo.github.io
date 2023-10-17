@@ -1,1 +1,6 @@
 name: My Jekyll Website
+collections:
+  team:
+    output: true
+  team_members:
+    output: true
