@@ -1,3 +1,0 @@
-# the plan
-
-## first stages
