@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDD Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="main.css">
+<style>
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color .15s ease, box-shadow .15s ease;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .tool-card:hover {
+    border-color: var(--a);
+    box-shadow: var(--shadow);
+  }
+
+  .tool-card:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .tool-card .tool-icon {
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .tool-card h2 {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -.01em;
+    margin: 4px 0 0;
+    color: var(--a);
+  }
+
+  .tool-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .tool-card .tool-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Browser-based utilities</div>
+    <h1>SDD Tools</h1>
+    <p>A collection of lightweight, client-side tools for everyday developer tasks. Everything runs in your browser&nbsp;&mdash;&nbsp;no data leaves your machine.</p>
+  </header>
+
+  <div class="tool-grid">
+    <a class="tool-card" href="json-compare.html">
+      <div class="tool-icon">⚖️</div>
+      <h2>Field Drift</h2>
+      <p>Compare two JSON exports of the same records. Entries are matched on <code>id</code>, fields are paired by name, and each pair is checked value&nbsp;by&nbsp;value.</p>
+      <div class="tool-tag">JSON &middot; Reconciliation</div>
+    </a>
+
+    <a class="tool-card" href="gitdiff_viewer.html">
+      <div class="tool-icon">📝</div>
+      <h2>Diff Viewer</h2>
+      <p>Load a <code>.diff</code> or <code>.patch</code> file and browse changes in a side-by-side view with a navigable file tree and syntax&nbsp;highlighting.</p>
+      <div class="tool-tag">Git &middot; Code review</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

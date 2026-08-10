@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Drift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="main.css">
+<style>
+  /* ---------- page-specific: inputs ---------- */
+
+  .picker-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .picker-row { grid-template-columns: 1fr; }
+  }
+
+  .picker {
+    --side: var(--a);
+    --side-tint: var(--a-tint);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--side);
+    border-radius: 4px;
+    padding: 16px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color .15s ease, background .15s ease;
+  }
+
+  .picker.side-b {
+    --side: var(--b);
+    --side-tint: var(--b-tint);
+  }
+
+  .picker.dragging {
+    background: var(--side-tint);
+    border-color: var(--side);
+  }
+
+  .picker-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .picker-label {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: .01em;
+    color: var(--side);
+  }
+
+  .picker-hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .file-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    word-break: break-all;
+    color: var(--ink);
+    min-height: 1.5em;
+  }
+
+  .file-name.empty { color: var(--muted); }
+
+  .file-meta {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    min-height: 1.4em;
+  }
+
+  .file-meta.bad { color: var(--diff); }
+
+  input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .picker.side-b .btn:hover { background: var(--b-tint); border-color: var(--b); }
+
+  /* ---------- page-specific: report ---------- */
+
+  .report {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .tile {
+    background: var(--surface);
+    padding: 14px 16px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .tile .n {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tile .k {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  .tile.a .n { color: var(--a); }
+  .tile.b .n { color: var(--b); }
+
+  .more {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 8px 16px 4px;
+  }
+
+  .fieldlist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .fieldlist .f {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--muted);
+  }
+
+  .fieldlist .f.matched { color: var(--ink); border-color: var(--muted); }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+
+  .col-label {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .col-label.a { color: var(--a); }
+  .col-label.b { color: var(--b); }
+
+  .linkish {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 1px dotted var(--muted);
+    padding: 0;
+    cursor: pointer;
+    margin: 8px 16px 6px;
+  }
+
+  .linkish:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+  details.raw > summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    list-style: none;
+  }
+
+  details.raw > summary::-webkit-details-marker { display: none; }
+
+  details.raw > summary::before {
+    content: "▸ ";
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  details.raw[open] > summary::before { content: "▾ "; }
+
+  .idle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 26px 18px 28px;
+  }
+
+  .idle-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .idle-note {
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 58ch;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">JSON record reconciliation</div>
+    <h1>Field Drift</h1>
+    <p>Pick two JSON exports of the same records. Every entry is matched on its <code>id</code>, fields are paired by name (case-insensitive, plus the known backend&nbsp;↔&nbsp;source aliases), and each pair is checked value by value.</p>
+  </header>
+
+  <div class="picker-row">
+    <div class="picker side-a" id="pick-a">
+      <div class="picker-head">
+        <span class="picker-label">File 1 &middot; backend</span>
+        <span class="picker-hint">-i1</span>
+      </div>
+      <div class="file-name empty" id="name-a">No file chosen</div>
+      <div class="file-meta" id="meta-a"></div>
+      <div>
+        <input type="file" id="input-a" accept=".json,application/json">
+        <label class="btn" for="input-a">Choose file&hellip;</label>
+      </div>
+    </div>
+
+    <div class="picker side-b" id="pick-b">
+      <div class="picker-head">
+        <span class="picker-label">File 2 &middot; source</span>
+        <span class="picker-hint">-i2</span>
+      </div>
+      <div class="file-name empty" id="name-b">No file chosen</div>
+      <div class="file-meta" id="meta-b"></div>
+      <div>
+        <input type="file" id="input-b" accept=".json,application/json">
+        <label class="btn" for="input-b">Choose file&hellip;</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="compare" type="button">Compare</button>
+    <span class="spacer"></span>
+    <button class="btn" id="copy" type="button" disabled>Copy report</button>
+    <span class="toast" id="toast">Copied</span>
+  </div>
+
+  <div class="report" id="report"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Port of the compare script                                          *
+   * ------------------------------------------------------------------ */
+
+  var KNOWN_MAPPINGS = {
+    requestNumber: "CaseIdAuto",
+    creationDate: "CreatedOn",
+    requestType: "CaseType",
+    requestStatus: "Status"
+  };
+
+  function isPlainObject(v) {
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+  }
+
+  // Mirrors load_json_array(): tolerates an array, a dict of dicts, or a lone dict.
+  function loadJsonArray(text) {
+    var content = (text || "").trim();
+    if (!content) return [];
+    var data = JSON.parse(content);
+    if (Array.isArray(data)) return data;
+    if (isPlainObject(data)) {
+      var vals = Object.keys(data).map(function (k) { return data[k]; });
+      return vals.every(isPlainObject) ? vals : [data];
+    }
+    return [];
+  }
+
+  // str(record.get(field, "")) with sane handling of null/objects.
+  function asText(v) {
+    if (v === undefined || v === null) return "";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+
+  function cell(rec, field) {
+    return asText(rec[field]).trim();
+  }
+
+  function byFirstThen(a, b) {
+    for (var i = 0; i < Math.max(a.length, b.length); i++) {
+      var x = a[i] === undefined ? "" : a[i];
+      var y = b[i] === undefined ? "" : b[i];
+      if (x < y) return -1;
+      if (x > y) return 1;
+    }
+    return 0;
+  }
+
+  function build(be, arr, name1, name2) {
+    var m = {
+      name1: name1, name2: name2,
+      beCount: be.length, arrCount: arr.length,
+      empty: !be.length || !arr.length,
+      missingId: null
+    };
+    if (m.empty) return m;
+
+    var noId = [];
+    if (!Object.prototype.hasOwnProperty.call(be[0], "id")) noId.push(name1);
+    if (!Object.prototype.hasOwnProperty.call(arr[0], "id")) noId.push(name2);
+    if (noId.length) { m.missingId = noId; return m; }
+
+    var beMap = {}, arrMap = {}, beOrder = [], arrOrder = [];
+    be.forEach(function (r) { var k = asText(r.id); if (!(k in beMap)) beOrder.push(k); beMap[k] = r; });
+    arr.forEach(function (r) { var k = asText(r.id); if (!(k in arrMap)) arrOrder.push(k); arrMap[k] = r; });
+
+    m.beMap = beMap; m.arrMap = arrMap;
+    m.common = beOrder.filter(function (k) { return k in arrMap; });
+    m.onlyBe = beOrder.filter(function (k) { return !(k in arrMap); });
+    m.onlyArr = arrOrder.filter(function (k) { return !(k in beMap); });
+
+    m.beFields = Object.keys(be[0]);
+    m.arrFields = Object.keys(arr[0]);
+
+    // Auto-detect matching fields by normalising keys to lowercase.
+    var beKeys = {}, arrKeys = {};
+    m.beFields.forEach(function (k) { beKeys[k.toLowerCase()] = k; });
+    m.arrFields.forEach(function (k) { arrKeys[k.toLowerCase()] = k; });
+
+    var matches = {};
+    Object.keys(beKeys).forEach(function (lower) {
+      if (lower in arrKeys) matches[beKeys[lower]] = arrKeys[lower];
+    });
+    Object.keys(KNOWN_MAPPINGS).forEach(function (beField) {
+      var arrField = KNOWN_MAPPINGS[beField];
+      if (m.beFields.indexOf(beField) !== -1 && m.arrFields.indexOf(arrField) !== -1) {
+        matches[beField] = arrField;
+      }
+    });
+
+    m.pairs = Object.keys(matches).sort().map(function (k) { return [k, matches[k]]; });
+
+    m.fieldDiffs = m.pairs.map(function (pair) {
+      var beField = pair[0], arrField = pair[1];
+      var diffs = [], pairsSeen = {}, pairList = [];
+      m.common.forEach(function (cid) {
+        var bv = cell(beMap[cid], beField);
+        var av = cell(arrMap[cid], arrField);
+        if (bv !== av) diffs.push({ id: cid, bv: bv, av: av });
+        var key = bv + " " + av;
+        if (!(key in pairsSeen)) { pairsSeen[key] = 1; pairList.push([bv, av]); }
+      });
+      // Enum-like: every common entry differs and the distinct pairs are few.
+      var mappings = null;
+      if (diffs.length && diffs.length === m.common.length && pairList.length <= 20) {
+        mappings = pairList.slice().sort(byFirstThen);
+      }
+      return { beField: beField, arrField: arrField, diffs: diffs, mappings: mappings };
+    });
+
+    m.enumTables = [];
+    [["requestType", "CaseType"], ["requestStatus", "Status"]].forEach(function (p) {
+      if (m.beFields.indexOf(p[0]) === -1 || m.arrFields.indexOf(p[1]) === -1) return;
+      var seen = {}, list = [];
+      m.common.forEach(function (cid) {
+        var bv = asText(beMap[cid][p[0]]);
+        var av = asText(arrMap[cid][p[1]]);
+        var key = bv + " " + av;
+        if (!(key in seen)) { seen[key] = 1; list.push([bv, av]); }
+      });
+      m.enumTables.push({ beField: p[0], arrField: p[1], pairs: list.sort(byFirstThen) });
+    });
+
+    var preview = function (map) {
+      return function (oid) {
+        var r = map[oid];
+        var first = Object.keys(r).slice(0, 3);
+        return { id: oid, info: first.map(function (k) { return k + "=" + asText(r[k]); }).join(", ") };
+      };
+    };
+    m.onlyBeRows = m.onlyBe.map(preview(beMap));
+    m.onlyArrRows = m.onlyArr.map(preview(arrMap));
+
+    return m;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Plain-text report (what the Copy button puts on the clipboard)      *
+   * ------------------------------------------------------------------ */
+
+  function pyList(keys) {
+    return "[" + keys.map(function (k) { return "'" + k + "'"; }).join(", ") + "]";
+  }
+
+  function pad(s, n) { return s.length >= n ? s : s + new Array(n - s.length + 1).join(" "); }
+
+  function toText(m) {
+    var L = [];
+    L.push(m.name1 + ": " + m.beCount + " entries");
+    L.push(m.name2 + ": " + m.arrCount + " entries");
+
+    if (m.empty) {
+      if (!m.beCount) L.push("", m.name1 + " is empty or has no entries. Nothing to compare.");
+      if (!m.arrCount) L.push("", m.name2 + " is empty or has no entries. Nothing to compare.");
+      return L.join("\n");
+    }
+    if (m.missingId) {
+      L.push("", "No \"id\" field in: " + m.missingId.join(", ") + ". Nothing to compare.");
+      return L.join("\n");
+    }
+
+    L.push("");
+    L.push("Common IDs: " + m.common.length);
+    L.push("Only in " + m.name1 + ": " + m.onlyBe.length);
+    L.push("Only in " + m.name2 + ": " + m.onlyArr.length);
+
+    L.push("", "=== FIELD MAPPING ===");
+    L.push(m.name1 + " fields: " + pyList(m.beFields));
+    L.push(m.name2 + " fields: " + pyList(m.arrFields));
+
+    L.push("", "=== FIELD DIFFERENCES (common entries) ===");
+    m.fieldDiffs.forEach(function (fd) {
+      L.push("");
+      L.push(fd.beField + " (" + m.name1 + ") vs " + fd.arrField + " (" + m.name2 + "): " + fd.diffs.length + " differences");
+      fd.diffs.slice(0, 10).forEach(function (d) {
+        L.push("  id=" + d.id);
+        L.push("    " + m.name1 + ": " + d.bv);
+        L.push("    " + m.name2 + ": " + d.av);
+      });
+      if (fd.diffs.length > 10) L.push("  ... and " + (fd.diffs.length - 10) + " more");
+      if (fd.mappings) {
+        L.push("  Value mappings:");
+        fd.mappings.forEach(function (p) { L.push("    " + pad(p[0], 30) + " <-> " + p[1]); });
+      }
+    });
+
+    m.enumTables.forEach(function (t) {
+      var width = t.beField === "requestType" ? 30 : 20;
+      L.push("", "=== " + t.beField + " vs " + t.arrField + " mappings ===");
+      t.pairs.forEach(function (p) { L.push("  " + pad(p[0], width) + " <-> " + p[1]); });
+    });
+
+    if (m.onlyBeRows.length) {
+      L.push("", "=== ENTRIES ONLY IN " + m.name1 + " ===");
+      m.onlyBeRows.forEach(function (r) { L.push("  " + r.info); });
+    }
+    if (m.onlyArrRows.length) {
+      L.push("", "=== ENTRIES ONLY IN " + m.name2 + " ===");
+      m.onlyArrRows.forEach(function (r) { L.push("  " + r.info); });
+    }
+
+    return L.join("\n");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Rendering                                                           *
+   * ------------------------------------------------------------------ */
+
+  var $report = document.getElementById("report");
+  var $toast = document.getElementById("toast");
+  var $copy = document.getElementById("copy");
+  var reportText = "";
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function block(title, chips) {
+    var s = el("section", "block");
+    var h = el("div", "block-head");
+    h.appendChild(el("h2", null, title));
+    (chips || []).forEach(function (c) { h.appendChild(el("span", "chip " + c.kind, c.text)); });
+    s.appendChild(h);
+    return s;
+  }
+
+  function table(headers, rows) {
+    var wrap = el("div", "scroll");
+    var t = el("table");
+    var thead = el("thead"), tr = el("tr");
+    headers.forEach(function (h) {
+      var th = el("th", h.cls || null, h.text);
+      tr.appendChild(th);
+    });
+    thead.appendChild(tr);
+    t.appendChild(thead);
+    var tb = el("tbody");
+    rows.forEach(function (r) {
+      var row = el("tr");
+      r.forEach(function (c) { row.appendChild(el("td", c.cls || null, c.text)); });
+      tb.appendChild(row);
+    });
+    t.appendChild(tb);
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  // Resting state: nothing is compared until the user picks two files.
+  function showIdle() {
+    $report.textContent = "";
+    reportText = "";
+    $copy.disabled = true;
+    var s = el("section", "block");
+    var b = el("div", "block-body pad idle");
+    b.appendChild(el("div", "idle-title", "No comparison yet"));
+    b.appendChild(el("div", "idle-note",
+      "Choose a JSON file on each side — or drop one onto a panel — then press Compare."));
+    s.appendChild(b);
+    $report.appendChild(s);
+  }
+
+  function render(m, note) {
+    $report.textContent = "";
+    reportText = toText(m);
+    $copy.disabled = false;
+
+    if (note) $report.appendChild(el("div", "banner", note));
+
+    if (m.empty || m.missingId) {
+      var msg;
+      if (m.missingId) {
+        msg = "No \"id\" field on the first entry of " + m.missingId.join(" or ") +
+              ". Records are matched on id — add it, or export the file with ids included.";
+      } else {
+        var names = [];
+        if (!m.beCount) names.push(m.name1);
+        if (!m.arrCount) names.push(m.name2);
+        msg = names.join(" and ") + (names.length > 1 ? " have" : " has") +
+              " no entries, so there is nothing to compare.";
+      }
+      $report.appendChild(el("div", "banner error", msg));
+      appendRaw();
+      return;
+    }
+
+    /* summary tiles */
+    var tiles = el("div", "tiles");
+    [
+      { cls: "a", n: m.beCount, k: m.name1 },
+      { cls: "b", n: m.arrCount, k: m.name2 },
+      { cls: "", n: m.common.length, k: "Common ids" },
+      { cls: "a", n: m.onlyBe.length, k: "Only in file 1" },
+      { cls: "b", n: m.onlyArr.length, k: "Only in file 2" }
+    ].forEach(function (t) {
+      var d = el("div", "tile " + t.cls);
+      d.appendChild(el("div", "n", String(t.n)));
+      d.appendChild(el("div", "k", t.k));
+      tiles.appendChild(d);
+    });
+    $report.appendChild(tiles);
+
+    /* field mapping */
+    var fm = block("Field mapping", [{ kind: "ok", text: m.pairs.length + " paired" }]);
+    var body = el("div", "block-body pad");
+    var cols = el("div", "cols");
+    var matchedBe = {}, matchedArr = {};
+    m.pairs.forEach(function (p) { matchedBe[p[0]] = 1; matchedArr[p[1]] = 1; });
+    [["a", m.name1, m.beFields, matchedBe], ["b", m.name2, m.arrFields, matchedArr]].forEach(function (c) {
+      var col = el("div");
+      col.appendChild(el("div", "col-label " + c[0], c[1]));
+      var list = el("div", "fieldlist");
+      c[2].forEach(function (f) { list.appendChild(el("span", "f" + (c[3][f] ? " matched" : ""), f)); });
+      col.appendChild(list);
+      cols.appendChild(col);
+    });
+    body.appendChild(cols);
+    fm.appendChild(body);
+    if (m.pairs.length) {
+      fm.appendChild(table(
+        [{ text: m.name1, cls: "a" }, { text: m.name2, cls: "b" }, { text: "Differences" }],
+        m.pairs.map(function (p, i) {
+          var fd = m.fieldDiffs[i];
+          return [
+            { text: p[0], cls: "va" },
+            { text: p[1], cls: "vb" },
+            { text: fd.diffs.length === 0 ? "identical" : String(fd.diffs.length) }
+          ];
+        })
+      ));
+    }
+    $report.appendChild(fm);
+
+    /* per-field differences */
+    m.fieldDiffs.forEach(function (fd) {
+      var chips = fd.diffs.length === 0
+        ? [{ kind: "ok", text: "identical across " + m.common.length }]
+        : [{ kind: "diff", text: fd.diffs.length + " of " + m.common.length + " differ" }];
+      var s = block(fd.beField + "  ↔  " + fd.arrField, chips);
+
+      if (fd.diffs.length) {
+        var shown = fd.diffs.slice(0, 10);
+        var tbl = table(
+          [{ text: "id" }, { text: m.name1, cls: "a" }, { text: m.name2, cls: "b" }],
+          shown.map(function (d) {
+            return [{ text: d.id, cls: "id" }, { text: d.bv, cls: "va" }, { text: d.av, cls: "vb" }];
+          })
+        );
+        s.appendChild(tbl);
+        if (fd.diffs.length > 10) {
+          var btn = el("button", "linkish", "Show all " + fd.diffs.length + " differences");
+          btn.type = "button";
+          btn.addEventListener("click", function () {
+            var full = table(
+              [{ text: "id" }, { text: m.name1, cls: "a" }, { text: m.name2, cls: "b" }],
+              fd.diffs.map(function (d) {
+                return [{ text: d.id, cls: "id" }, { text: d.bv, cls: "va" }, { text: d.av, cls: "vb" }];
+              })
+            );
+            s.replaceChild(full, tbl);
+            btn.remove();
+          });
+          s.appendChild(el("div", "more", "Showing the first 10."));
+          s.appendChild(btn);
+        }
+        if (fd.mappings) {
+          s.appendChild(el("div", "more", "Every common entry differs — looks like an enum. Distinct value pairs:"));
+          s.appendChild(table(
+            [{ text: m.name1, cls: "a" }, { text: m.name2, cls: "b" }],
+            fd.mappings.map(function (p) {
+              return [{ text: p[0], cls: "va" }, { text: p[1], cls: "vb" }];
+            })
+          ));
+        }
+      }
+      $report.appendChild(s);
+    });
+
+    /* enum cross-reference tables */
+    m.enumTables.forEach(function (t) {
+      var s = block(t.beField + " vs " + t.arrField + " mappings",
+        [{ kind: "ok", text: t.pairs.length + " pairs" }]);
+      s.appendChild(table(
+        [{ text: t.beField, cls: "a" }, { text: t.arrField, cls: "b" }],
+        t.pairs.map(function (p) {
+          return [{ text: p[0] || "—", cls: "va" }, { text: p[1] || "—", cls: "vb" }];
+        })
+      ));
+      $report.appendChild(s);
+    });
+
+    /* only-in lists */
+    [[m.onlyBeRows, "Only in " + m.name1, "a"], [m.onlyArrRows, "Only in " + m.name2, "b"]].forEach(function (o) {
+      if (!o[0].length) return;
+      var s = block(o[1], [{ kind: o[2], text: o[0].length + (o[0].length === 1 ? " entry" : " entries") }]);
+      s.appendChild(table(
+        [{ text: "First three fields" }],
+        o[0].map(function (r) { return [{ text: r.info, cls: o[2] === "a" ? "va" : "vb" }]; })
+      ));
+      $report.appendChild(s);
+    });
+
+    appendRaw();
+  }
+
+  function appendRaw() {
+    var d = el("details", "raw");
+    var sm = el("summary", null, "Plain-text report");
+    d.appendChild(sm);
+    d.appendChild(el("pre", null, reportText));
+    var s = el("section", "block");
+    s.appendChild(d);
+    $report.appendChild(s);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * File handling                                                       *
+   * ------------------------------------------------------------------ */
+
+  var files = { a: null, b: null };
+
+  function setFile(side, name, text) {
+    var nameEl = document.getElementById("name-" + side);
+    var metaEl = document.getElementById("meta-" + side);
+    nameEl.textContent = name;
+    nameEl.classList.remove("empty");
+    metaEl.classList.remove("bad");
+    try {
+      var rows = loadJsonArray(text);
+      files[side] = { name: name, rows: rows };
+      metaEl.textContent = rows.length + (rows.length === 1 ? " entry" : " entries");
+    } catch (err) {
+      files[side] = null;
+      metaEl.classList.add("bad");
+      metaEl.textContent = "Not valid JSON — " + err.message;
+    }
+  }
+
+  function readFile(side, file) {
+    var reader = new FileReader();
+    reader.onload = function () { setFile(side, file.name, String(reader.result)); };
+    reader.onerror = function () {
+      document.getElementById("meta-" + side).textContent = "Could not read this file.";
+    };
+    reader.readAsText(file);
+  }
+
+  ["a", "b"].forEach(function (side) {
+    document.getElementById("input-" + side).addEventListener("change", function (e) {
+      if (e.target.files && e.target.files[0]) readFile(side, e.target.files[0]);
+    });
+    var zone = document.getElementById("pick-" + side);
+    zone.addEventListener("dragover", function (e) { e.preventDefault(); zone.classList.add("dragging"); });
+    zone.addEventListener("dragleave", function () { zone.classList.remove("dragging"); });
+    zone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      zone.classList.remove("dragging");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) readFile(side, e.dataTransfer.files[0]);
+    });
+  });
+
+  document.getElementById("compare").addEventListener("click", function () {
+    if (!files.a || !files.b) {
+      $report.textContent = "";
+      reportText = "";
+      $copy.disabled = true;
+      $report.appendChild(el("div", "banner error",
+        "Choose a valid JSON file on both sides first, then press Compare."));
+      return;
+    }
+    render(build(files.a.rows, files.b.rows, files.a.name, files.b.name), null);
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    if (!reportText) return;
+    var done = function () {
+      $toast.classList.add("show");
+      setTimeout(function () { $toast.classList.remove("show"); }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(reportText).then(done, fallback);
+    } else {
+      fallback();
+    }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = reportText;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { /* nothing to do */ }
+      document.body.removeChild(ta);
+    }
+  });
+
+  showIdle();
+})();
+</script>
+
+</body>
+</html>
