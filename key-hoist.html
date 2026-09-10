@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key Hoist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="main.css">
+<style>
+  /* ============================================================
+     Page-specific components, built from main.css tokens
+     ============================================================ */
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--a);
+    border-radius: 4px;
+    padding: 16px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color .15s ease, background .15s ease;
+  }
+
+  .panel.dragging { background: var(--a-tint); border-color: var(--a); }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .panel-label {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: .01em;
+    color: var(--a);
+  }
+
+  .panel-hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .source-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .file-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    word-break: break-all;
+    color: var(--ink);
+  }
+
+  .file-name.empty { color: var(--muted); }
+
+  input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  textarea {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 12px 14px;
+    width: 100%;
+    min-height: 190px;
+    resize: vertical;
+    tab-size: 2;
+  }
+
+  textarea:focus-visible,
+  input[type="text"]:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  .opts {
+    display: flex;
+    align-items: flex-end;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .field label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  input[type="text"],
+  select {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 7px 10px;
+  }
+
+  input[type="text"] { width: 190px; }
+
+  .field-note {
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: 46ch;
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .tile {
+    background: var(--surface);
+    padding: 14px 16px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .tile .n {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tile .k {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  .tile.a .n { color: var(--a); }
+  .tile.warn .n { color: var(--diff); }
+
+  .result { display: flex; flex-direction: column; gap: 22px; }
+
+  pre.out {
+    max-height: 520px;
+    overflow: auto;
+    padding: 14px 16px 16px;
+    background: var(--surface-2);
+  }
+
+  .idle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 26px 18px 28px;
+  }
+
+  .idle-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .idle-note {
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 58ch;
+  }
+
+  .more {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 10px 16px 2px;
+  }
+
+  a.dl {
+    text-decoration: none;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">JSON reshaping</div>
+    <h1>Key Hoist</h1>
+    <p>Turn a JSON object-of-objects into an array, moving each key inside its own object as an <code>id</code> field. Same transform as the script, in the browser — nothing is uploaded anywhere.</p>
+  </header>
+
+  <div class="panel" id="panel">
+    <div class="panel-head">
+      <span class="panel-label">Source JSON</span>
+      <span class="panel-hint">-i / --input</span>
+    </div>
+    <div class="source-row">
+      <input type="file" id="file" accept=".json,application/json">
+      <label class="btn" for="file">Choose file&hellip;</label>
+      <span class="file-name empty" id="file-name">No file chosen — or paste below</span>
+    </div>
+    <textarea id="input" spellcheck="false" placeholder='{
+  "a3f21": { "name": "Turbine housing", "kind": "part" },
+  "b7c04": { "name": "Rotor blade",     "kind": "part" }
+}'></textarea>
+  </div>
+
+  <div class="panel" style="border-top-color: var(--b);">
+    <div class="panel-head">
+      <span class="panel-label" style="color: var(--b);">Options</span>
+      <span class="panel-hint">-o / --output</span>
+    </div>
+    <div class="opts">
+      <div class="field">
+        <label for="keyfield">Key field name</label>
+        <input type="text" id="keyfield" value="id" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="indent">Indent</label>
+        <select id="indent">
+          <option value="2" selected>2 spaces</option>
+          <option value="4">4 spaces</option>
+          <option value="0">Minified</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="outname">Download as</label>
+        <input type="text" id="outname" value="assets-array.json" spellcheck="false">
+      </div>
+      <p class="field-note">The script's docstring says <code>asset-id</code> but its code writes <code>id</code>. This defaults to <code>id</code>, matching the code — change it here if you meant the other.</p>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="run" type="button">Transform</button>
+    <span class="spacer"></span>
+    <button class="btn" id="copy" type="button" disabled>Copy JSON</button>
+    <a class="btn dl" id="download" role="button" aria-disabled="true">Download</a>
+    <span class="toast" id="toast">Copied</span>
+  </div>
+
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Transform — mirrors  [{"id": key, **object} for key, object in ...]  *
+   * ------------------------------------------------------------------ */
+
+  function isPlainObject(v) {
+    return v !== null && typeof v === "object" && !Array.isArray(v);
+  }
+
+  function transform(objects, keyField) {
+    var rows = [], collisions = [];
+    Object.keys(objects).forEach(function (key) {
+      var obj = objects[key];
+      var out = {};
+      out[keyField] = key;                       // hoisted key goes in first…
+      Object.keys(obj).forEach(function (p) {
+        if (p === keyField) collisions.push({ key: key, kept: obj[p] });
+        out[p] = obj[p];                         // …and the object's own keys win, as in Python
+      });
+      rows.push(out);
+    });
+    return { rows: rows, collisions: collisions };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * DOM                                                                 *
+   * ------------------------------------------------------------------ */
+
+  var $input = document.getElementById("input");
+  var $result = document.getElementById("result");
+  var $copy = document.getElementById("copy");
+  var $download = document.getElementById("download");
+  var $toast = document.getElementById("toast");
+  var $fileName = document.getElementById("file-name");
+  var $outName = document.getElementById("outname");
+  var $panel = document.getElementById("panel");
+
+  var outputText = "";
+  var blobUrl = null;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function block(title, chips) {
+    var s = el("section", "block");
+    var h = el("div", "block-head");
+    h.appendChild(el("h2", null, title));
+    (chips || []).forEach(function (c) { h.appendChild(el("span", "chip " + c.kind, c.text)); });
+    s.appendChild(h);
+    return s;
+  }
+
+  function setOutput(text, name) {
+    outputText = text;
+    $copy.disabled = !text;
+    if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+    if (text) {
+      blobUrl = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      $download.href = blobUrl;
+      $download.setAttribute("download", name);
+      $download.removeAttribute("aria-disabled");
+      $download.style.opacity = "";
+      $download.style.pointerEvents = "";
+    } else {
+      $download.removeAttribute("href");
+      $download.setAttribute("aria-disabled", "true");
+      $download.style.opacity = ".45";
+      $download.style.pointerEvents = "none";
+    }
+  }
+
+  function showIdle() {
+    $result.textContent = "";
+    setOutput("", "");
+    var s = el("section", "block");
+    var b = el("div", "block-body pad idle");
+    b.appendChild(el("div", "idle-title", "Nothing transformed yet"));
+    b.appendChild(el("div", "idle-note",
+      "Choose a .json file, drop one onto the source panel, or paste an object below — then press Transform."));
+    s.appendChild(b);
+    $result.appendChild(s);
+  }
+
+  function showError(msg) {
+    $result.textContent = "";
+    setOutput("", "");
+    $result.appendChild(el("div", "banner error", msg));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Run                                                                 *
+   * ------------------------------------------------------------------ */
+
+  function run() {
+    var raw = $input.value.trim();
+    if (!raw) { showError("Nothing to transform — choose a file or paste some JSON first."); return; }
+
+    var keyField = document.getElementById("keyfield").value.trim();
+    if (!keyField) { showError("The key field name can't be empty. Use “id” unless you need something else."); return; }
+
+    var data;
+    try {
+      data = JSON.parse(raw);
+    } catch (err) {
+      showError("That isn't valid JSON — " + err.message + ". Fix the source and press Transform again.");
+      return;
+    }
+
+    if (!isPlainObject(data)) {
+      var kind = Array.isArray(data) ? "array" : (data === null ? "null" : typeof data);
+      showError("The source is a JSON " + kind + ", not an object. This transform needs a top-level " +
+                "object whose keys become the " + keyField + " of each entry.");
+      return;
+    }
+
+    var bad = Object.keys(data).filter(function (k) { return !isPlainObject(data[k]); });
+    if (bad.length) {
+      showError("Every value has to be an object, but " + bad.length +
+                (bad.length === 1 ? " key isn't: " : " keys aren't: ") +
+                bad.slice(0, 8).map(function (k) { return "“" + k + "”"; }).join(", ") +
+                (bad.length > 8 ? ", …" : "") + ".");
+      return;
+    }
+
+    var t = transform(data, keyField);
+    var indent = parseInt(document.getElementById("indent").value, 10);
+    var text = JSON.stringify(t.rows, null, indent || 0) + "\n";
+    var name = ($outName.value.trim() || "assets-array.json");
+    setOutput(text, name);
+
+    render(t, text, keyField, name);
+  }
+
+  function render(t, text, keyField, name) {
+    $result.textContent = "";
+
+    var tiles = el("div", "tiles");
+    [
+      { cls: "a", n: t.rows.length, k: "Objects" },
+      { cls: "a", n: new Blob([text]).size, k: "Bytes out" },
+      { cls: t.collisions.length ? "warn" : "", n: t.collisions.length, k: "Key collisions" }
+    ].forEach(function (x) {
+      var d = el("div", "tile " + x.cls);
+      d.appendChild(el("div", "n", String(x.n)));
+      d.appendChild(el("div", "k", x.k));
+      tiles.appendChild(d);
+    });
+    $result.appendChild(tiles);
+
+    if (t.collisions.length) {
+      $result.appendChild(el("div", "banner error",
+        t.collisions.length + (t.collisions.length === 1 ? " entry already had" : " entries already had") +
+        " a “" + keyField + "” field of its own. Just like the Python version, the existing value wins " +
+        "and the outer key is dropped for those entries — e.g. key “" + t.collisions[0].key +
+        "” became “" + String(t.collisions[0].kept) + "”."));
+    }
+
+    $result.appendChild(el("div", "banner", "Wrote " + t.rows.length + " objects to " + name));
+
+    var s = block("Result", [{ kind: "ok", text: t.rows.length + " objects" }]);
+    var preview = text.length > 200000 ? text.slice(0, 200000) : text;
+    if (preview !== text) {
+      s.appendChild(el("div", "more",
+        "Preview trimmed to the first 200,000 characters. Copy and Download still give you the whole file."));
+    }
+    s.appendChild(el("pre", "out", preview));
+    $result.appendChild(s);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Input handling                                                      *
+   * ------------------------------------------------------------------ */
+
+  function readFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      $input.value = String(reader.result);
+      $fileName.textContent = file.name;
+      $fileName.classList.remove("empty");
+      var base = file.name.replace(/\.json$/i, "");
+      $outName.value = base + "-array.json";
+    };
+    reader.onerror = function () { showError("Could not read " + file.name + "."); };
+    reader.readAsText(file);
+  }
+
+  document.getElementById("file").addEventListener("change", function (e) {
+    if (e.target.files && e.target.files[0]) readFile(e.target.files[0]);
+  });
+
+  $panel.addEventListener("dragover", function (e) { e.preventDefault(); $panel.classList.add("dragging"); });
+  $panel.addEventListener("dragleave", function () { $panel.classList.remove("dragging"); });
+  $panel.addEventListener("drop", function (e) {
+    e.preventDefault();
+    $panel.classList.remove("dragging");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+  });
+
+  $input.addEventListener("input", function () {
+    if ($fileName.classList.contains("empty")) return;
+    $fileName.textContent = "No file chosen — or paste below";
+    $fileName.classList.add("empty");
+  });
+
+  document.getElementById("run").addEventListener("click", run);
+
+  $copy.addEventListener("click", function () {
+    if (!outputText) return;
+    var done = function () {
+      $toast.classList.add("show");
+      setTimeout(function () { $toast.classList.remove("show"); }, 1600);
+    };
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = outputText;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { /* nothing to do */ }
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(outputText).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
+
+  showIdle();
+})();
+</script>
+
+</body>
+</html>
