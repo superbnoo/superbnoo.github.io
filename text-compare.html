@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text Compare</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="main.css">
+<style>
+  .wrap { max-width: 1280px; padding-bottom: 60px; }
+
+  /* ---------- editor columns ---------- */
+
+  .editor-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .editor-row { grid-template-columns: 1fr; }
+  }
+
+  .editor-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .editor-label {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .01em;
+  }
+
+  .editor-label.side-a { color: var(--a); }
+  .editor-label.side-b { color: var(--b); }
+
+  textarea {
+    width: 100%;
+    min-height: 420px;
+    resize: vertical;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 16px;
+    tab-size: 4;
+    outline: none;
+    transition: border-color .15s ease;
+  }
+
+  textarea:focus {
+    border-color: var(--focus);
+  }
+
+  textarea::placeholder {
+    color: var(--muted);
+    opacity: .7;
+  }
+
+  /* ---------- diff output ---------- */
+
+  .diff-output {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .diff-line {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 0 16px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    display: flex;
+    gap: 0;
+  }
+
+  .diff-line .ln {
+    display: inline-block;
+    min-width: 4ch;
+    text-align: right;
+    padding-right: 12px;
+    color: var(--muted);
+    opacity: .6;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .diff-line .ln + .ln { margin-left: 4px; }
+
+  .diff-line .txt {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .diff-line.ctx  { color: var(--muted); background: transparent; }
+  .diff-line.add  { color: var(--ok);   background: var(--ok-tint); }
+  .diff-line.del  { color: var(--diff); background: var(--diff-tint); }
+  .diff-line.hunk {
+    color: var(--a);
+    background: var(--a-tint);
+    font-weight: 600;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-top: 4px;
+  }
+
+  .diff-stats {
+    display: flex;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .diff-stats .stat-add { color: var(--ok); }
+  .diff-stats .stat-del { color: var(--diff); }
+  .diff-stats .stat-ctx { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Line-by-line diff</div>
+    <h1>Text Compare</h1>
+    <p>Paste text into both sides and hit Compare. A unified diff is computed entirely in the browser using the same algorithm as <code>diff&nbsp;-u</code>.</p>
+  </header>
+
+  <div class="editor-row">
+    <div class="editor-col">
+      <span class="editor-label side-a">Original (left)</span>
+      <textarea id="text-a" spellcheck="false" placeholder="Paste the original text here…"></textarea>
+    </div>
+    <div class="editor-col">
+      <span class="editor-label side-b">Modified (right)</span>
+      <textarea id="text-b" spellcheck="false" placeholder="Paste the modified text here…"></textarea>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="compare" type="button">Compare</button>
+    <button class="btn" id="swap" type="button">Swap sides</button>
+    <button class="btn" id="clear" type="button">Clear</button>
+  </div>
+
+  <div id="report"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Myers diff (O(ND)) — produces an edit script of inserts & deletes  *
+   * ------------------------------------------------------------------ */
+
+  function myers(a, b) {
+    var N = a.length, M = b.length, MAX = N + M;
+    if (MAX === 0) return [];
+
+    var v = new Array(2 * MAX + 1);
+    v[MAX + 1] = 0;
+    var trace = [];
+
+    for (var d = 0; d <= MAX; d++) {
+      trace.push(v.slice());
+      for (var k = -d; k <= d; k += 2) {
+        var idx = k + MAX;
+        var x;
+        if (k === -d || (k !== d && v[idx - 1] < v[idx + 1])) {
+          x = v[idx + 1];
+        } else {
+          x = v[idx - 1] + 1;
+        }
+        var y = x - k;
+        while (x < N && y < M && a[x] === b[y]) { x++; y++; }
+        v[idx] = x;
+        if (x >= N && y >= M) {
+          return backtrack(trace, a, b, MAX);
+        }
+      }
+    }
+    return [];
+  }
+
+  function backtrack(trace, a, b, MAX) {
+    var edits = [];
+    var x = a.length, y = b.length;
+    for (var d = trace.length - 1; d > 0; d--) {
+      var v = trace[d - 1];
+      var k = x - y;
+      var prevK;
+      if (k === -d || (k !== d && v[k - 1 + MAX] < v[k + 1 + MAX])) {
+        prevK = k + 1;
+      } else {
+        prevK = k - 1;
+      }
+      var prevX = v[prevK + MAX];
+      var prevY = prevX - prevK;
+
+      while (x > prevX && y > prevY) {
+        x--; y--;
+        edits.push({ type: "eq", a: x, b: y });
+      }
+      if (d > 0) {
+        if (x === prevX) {
+          edits.push({ type: "ins", b: prevY });
+          y--;
+        } else {
+          edits.push({ type: "del", a: prevX });
+          x--;
+        }
+      }
+    }
+    while (x > 0 && y > 0) {
+      x--; y--;
+      edits.push({ type: "eq", a: x, b: y });
+    }
+    edits.reverse();
+    return edits;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Build unified-diff hunks with context lines                        *
+   * ------------------------------------------------------------------ */
+
+  function unifiedHunks(aLines, bLines, edits, ctx) {
+    ctx = ctx === undefined ? 3 : ctx;
+
+    var changes = [];
+    edits.forEach(function (e) {
+      if (e.type === "del") changes.push({ idx: changes.length, type: "del", aLn: e.a, bLn: null, text: aLines[e.a] });
+      else if (e.type === "ins") changes.push({ idx: changes.length, type: "ins", aLn: null, bLn: e.b, text: bLines[e.b] });
+      else changes.push({ idx: changes.length, type: "eq", aLn: e.a, bLn: e.b, text: aLines[e.a] });
+    });
+
+    var diffIdxs = [];
+    changes.forEach(function (c, i) { if (c.type !== "eq") diffIdxs.push(i); });
+    if (!diffIdxs.length) return [];
+
+    var groups = [], cur = [diffIdxs[0]];
+    for (var i = 1; i < diffIdxs.length; i++) {
+      if (diffIdxs[i] - diffIdxs[i - 1] <= ctx * 2 + 1) {
+        cur.push(diffIdxs[i]);
+      } else {
+        groups.push(cur);
+        cur = [diffIdxs[i]];
+      }
+    }
+    groups.push(cur);
+
+    var hunks = [];
+    groups.forEach(function (g) {
+      var lo = Math.max(0, g[0] - ctx);
+      var hi = Math.min(changes.length - 1, g[g.length - 1] + ctx);
+      var lines = [];
+      var aStart = null, bStart = null, aCnt = 0, bCnt = 0;
+      for (var j = lo; j <= hi; j++) {
+        var c = changes[j];
+        if (aStart === null) {
+          aStart = c.aLn !== null ? c.aLn : (c.type === "ins" ? (j > 0 ? changes[j - 1].aLn : 0) : 0);
+          bStart = c.bLn !== null ? c.bLn : (c.type === "del" ? (j > 0 ? changes[j - 1].bLn : 0) : 0);
+        }
+        if (c.type === "eq")  { lines.push({ type: "ctx", text: c.text, aLn: c.aLn, bLn: c.bLn }); aCnt++; bCnt++; }
+        if (c.type === "del") { lines.push({ type: "del", text: c.text, aLn: c.aLn, bLn: null }); aCnt++; }
+        if (c.type === "ins") { lines.push({ type: "add", text: c.text, aLn: null, bLn: c.bLn }); bCnt++; }
+      }
+      hunks.push({ aStart: aStart + 1, bStart: bStart + 1, aCnt: aCnt, bCnt: bCnt, lines: lines });
+    });
+
+    return hunks;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Rendering                                                          *
+   * ------------------------------------------------------------------ */
+
+  var $report = document.getElementById("report");
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function renderDiff(aText, bText) {
+    $report.textContent = "";
+    var aLines = aText.split("\n");
+    var bLines = bText.split("\n");
+
+    var edits = myers(aLines, bLines);
+    var hunks = unifiedHunks(aLines, bLines, edits, 3);
+
+    if (!hunks.length) {
+      var b = el("div", "banner", "No differences — both sides are identical.");
+      $report.appendChild(b);
+      return;
+    }
+
+    var adds = 0, dels = 0;
+    hunks.forEach(function (h) {
+      h.lines.forEach(function (l) {
+        if (l.type === "add") adds++;
+        if (l.type === "del") dels++;
+      });
+    });
+
+    var section = el("section", "block");
+
+    var head = el("div", "block-head");
+    head.appendChild(el("h2", null, "Unified diff"));
+    head.appendChild(el("span", "chip diff", dels + " removed"));
+    head.appendChild(el("span", "chip ok", adds + " added"));
+    section.appendChild(head);
+
+    var stats = el("div", "diff-stats");
+    stats.appendChild(el("span", "stat-del", "−" + dels + " line" + (dels !== 1 ? "s" : "")));
+    stats.appendChild(el("span", "stat-add", "+" + adds + " line" + (adds !== 1 ? "s" : "")));
+    stats.appendChild(el("span", "stat-ctx", aLines.length + " → " + bLines.length + " lines total"));
+    section.appendChild(stats);
+
+    var body = el("div", "diff-output");
+
+    hunks.forEach(function (h) {
+      var hunkLine = el("div", "diff-line hunk");
+      var txt = el("span", "txt",
+        "@@ -" + h.aStart + "," + h.aCnt + " +" + h.bStart + "," + h.bCnt + " @@");
+      hunkLine.appendChild(txt);
+      body.appendChild(hunkLine);
+
+      h.lines.forEach(function (l) {
+        var row = el("div", "diff-line " + l.type);
+
+        var lnA = el("span", "ln", l.aLn !== null ? String(l.aLn + 1) : "");
+        var lnB = el("span", "ln", l.bLn !== null ? String(l.bLn + 1) : "");
+        row.appendChild(lnA);
+        row.appendChild(lnB);
+
+        var prefix = l.type === "add" ? "+" : l.type === "del" ? "-" : " ";
+        var txt = el("span", "txt", prefix + " " + l.text);
+        row.appendChild(txt);
+
+        body.appendChild(row);
+      });
+    });
+
+    section.appendChild(body);
+    $report.appendChild(section);
+
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Event wiring                                                       *
+   * ------------------------------------------------------------------ */
+
+  document.getElementById("compare").addEventListener("click", function () {
+    var a = document.getElementById("text-a").value;
+    var b = document.getElementById("text-b").value;
+    if (!a && !b) {
+      $report.textContent = "";
+      $report.appendChild(el("div", "banner error", "Paste some text on both sides first."));
+      return;
+    }
+    renderDiff(a, b);
+  });
+
+  document.getElementById("swap").addEventListener("click", function () {
+    var ta = document.getElementById("text-a");
+    var tb = document.getElementById("text-b");
+    var tmp = ta.value;
+    ta.value = tb.value;
+    tb.value = tmp;
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    document.getElementById("text-a").value = "";
+    document.getElementById("text-b").value = "";
+    $report.textContent = "";
+  });
+
+})();
+</script>
+</body>
+</html>
