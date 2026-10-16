@@ -194,6 +194,17 @@
   .cell.selected .drag-handle { opacity: 1; }
 
   .cell.drag-preview { background: var(--a-tint); border-color: var(--a); }
+
+  .measure-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    border-left: 1px dashed var(--muted);
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 1;
+  }
 </style>
 </head>
 <body>
@@ -376,6 +387,17 @@
       if (cell) {
         div.classList.add("has-note");
         div.appendChild(document.createTextNode(noteText(cell)));
+
+        if (span > 1) {
+          for (var offset = 1; offset < span; offset++) {
+            if ((g + offset) % CELLS_PER_MEASURE === 0) {
+              var divider = el("div", "measure-divider");
+              divider.style.left = ((offset / span) * 100) + "%";
+              div.appendChild(divider);
+            }
+          }
+        }
+
         var handle = el("div", "drag-handle");
         (function (h, li, r, mi, ci) {
           h.addEventListener("mousedown", function (e) {
