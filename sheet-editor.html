@@ -61,7 +61,7 @@
     background: var(--surface-2);
     border: 1px solid var(--line);
     border-right: none;
-    padding: 8px 6px;
+    padding: 8px 0;
     text-align: left;
     cursor: pointer;
     position: relative;
@@ -79,6 +79,11 @@
 
   .cell.has-note { background: var(--surface); font-weight: 600; }
   .cell.has-note:hover { background: var(--a-tint); }
+
+  .note-text {
+    display: inline-block;
+    text-align: center;
+  }
 
   .cell.selected {
     outline: 2px solid var(--focus);
@@ -386,7 +391,9 @@
 
       if (cell) {
         div.classList.add("has-note");
-        div.appendChild(document.createTextNode(noteText(cell)));
+        var noteSpan = el("span", "note-text", noteText(cell));
+        noteSpan.style.width = (100 / span) + "%";
+        div.appendChild(noteSpan);
 
         if (span > 1) {
           for (var offset = 1; offset < span; offset++) {
