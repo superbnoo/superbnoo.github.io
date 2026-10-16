@@ -277,6 +277,35 @@
     return n;
   }
 
+  /* ---- Flat-view helpers (treat 32 cells across 4 measures as one array) ---- */
+
+  function getFlat(line, row, globalIdx) {
+    var mIdx = Math.floor(globalIdx / CELLS_PER_MEASURE);
+    var cIdx = globalIdx % CELLS_PER_MEASURE;
+    return line.measures[mIdx][row][cIdx];
+  }
+
+  function setFlat(line, row, globalIdx, value) {
+    var mIdx = Math.floor(globalIdx / CELLS_PER_MEASURE);
+    var cIdx = globalIdx % CELLS_PER_MEASURE;
+    line.measures[mIdx][row][cIdx] = value;
+  }
+
+  function toGlobal(measureIdx, cellIdx) {
+    return measureIdx * CELLS_PER_MEASURE + cellIdx;
+  }
+
+  function findSpanOwnerFlat(line, row, globalIdx) {
+    for (var j = globalIdx - 1; j >= 0; j--) {
+      var c = getFlat(line, row, j);
+      if (c !== null) {
+        if (j + c.span > globalIdx) return j;
+        return -1;
+      }
+    }
+    return -1;
+  }
+
   /* ---- Rendering ---- */
 
   var $sheet = document.getElementById("sheet");
@@ -331,67 +360,54 @@
 
   function renderNoteRow(line, lineIdx, row) {
     var grid = el("div", "note-row");
-    line.measures.forEach(function (measure, mIdx) {
-      var cells = measure[row];
-      for (var i = 0; i < CELLS_PER_MEASURE; i++) {
-        var cell = cells[i];
-        var globalCol = mIdx * CELLS_PER_MEASURE + i;
+    for (var g = 0; g < TOTAL_COLS; g++) {
+      var cell = getFlat(line, row, g);
+      var mIdx = Math.floor(g / CELLS_PER_MEASURE);
+      var cIdx = g % CELLS_PER_MEASURE;
 
-        if (cell === null && i > 0) {
-          var prev = findSpanOwner(cells, i);
-          if (prev !== null) continue;
-        }
+      if (cell === null && g > 0) {
+        if (findSpanOwnerFlat(line, row, g) !== -1) continue;
+      }
 
-        var span = cell ? cell.span : 1;
-        var div = el("div", "cell");
-        div.style.gridColumn = (globalCol + 1) + " / span " + span;
+      var span = cell ? cell.span : 1;
+      var div = el("div", "cell");
+      div.style.gridColumn = (g + 1) + " / span " + span;
 
-        if (cell) {
-          div.classList.add("has-note");
-          div.appendChild(document.createTextNode(noteText(cell)));
-          var handle = el("div", "drag-handle");
-          (function (h, li, r, mi, ci) {
-            h.addEventListener("mousedown", function (e) {
-              onDragStart(e, li, r, mi, ci);
-            });
-          })(handle, lineIdx, row, mIdx, i);
-          div.appendChild(handle);
-        }
-
-        if (i === 0 && mIdx > 0) div.classList.add("measure-start");
-
-        div.dataset.line = lineIdx;
-        div.dataset.row = row;
-        div.dataset.measure = mIdx;
-        div.dataset.cell = i;
-
-        (function (d, li, r, mi, ci, c) {
-          d.addEventListener("click", function (e) {
-            e.stopPropagation();
-            hidePopup();
-            if (!c) {
-              deselectCell();
-              showPopup(d, li, r, mi, ci);
-            } else {
-              selectCell(li, r, mi, ci);
-            }
+      if (cell) {
+        div.classList.add("has-note");
+        div.appendChild(document.createTextNode(noteText(cell)));
+        var handle = el("div", "drag-handle");
+        (function (h, li, r, mi, ci) {
+          h.addEventListener("mousedown", function (e) {
+            onDragStart(e, li, r, mi, ci);
           });
-        })(div, lineIdx, row, mIdx, i, cell);
-
-        grid.appendChild(div);
+        })(handle, lineIdx, row, mIdx, cIdx);
+        div.appendChild(handle);
       }
-    });
-    return grid;
-  }
 
-  function findSpanOwner(cells, idx) {
-    for (var j = idx - 1; j >= 0; j--) {
-      if (cells[j] !== null) {
-        if (j + cells[j].span > idx) return j;
-        return null;
-      }
+      if (cIdx === 0 && mIdx > 0) div.classList.add("measure-start");
+
+      div.dataset.line = lineIdx;
+      div.dataset.row = row;
+      div.dataset.measure = mIdx;
+      div.dataset.cell = cIdx;
+
+      (function (d, li, r, mi, ci, c) {
+        d.addEventListener("click", function (e) {
+          e.stopPropagation();
+          hidePopup();
+          if (!c) {
+            deselectCell();
+            showPopup(d, li, r, mi, ci);
+          } else {
+            selectCell(li, r, mi, ci);
+          }
+        });
+      })(div, lineIdx, row, mIdx, cIdx, cell);
+
+      grid.appendChild(div);
     }
-    return null;
+    return grid;
   }
 
   function renderBeatRow() {
@@ -434,11 +450,12 @@
   function deleteSelected() {
     if (!selected) return;
     var s = selected;
-    var cells = state.lines[s.lineIdx].measures[s.measureIdx][s.row];
-    var cell = cells[s.cellIdx];
+    var line = state.lines[s.lineIdx];
+    var globalStart = toGlobal(s.measureIdx, s.cellIdx);
+    var cell = getFlat(line, s.row, globalStart);
     if (!cell) return;
     for (var i = 0; i < cell.span; i++) {
-      cells[s.cellIdx + i] = null;
+      setFlat(line, s.row, globalStart + i, null);
     }
     deselectCell();
     renderSheet();
@@ -465,7 +482,8 @@
   function onDragMove(e) {
     if (!dragging) return;
     var d = dragging;
-    var cells = state.lines[d.lineIdx].measures[d.measureIdx][d.row];
+    var line = state.lines[d.lineIdx];
+    var globalStart = toGlobal(d.measureIdx, d.cellIdx);
     var cellEl = findCellEl(d.lineIdx, d.row, d.measureIdx, d.cellIdx);
     if (!cellEl) return;
 
@@ -475,21 +493,23 @@
     var delta = Math.round(dx / cellWidth);
     var newSpan = Math.max(1, d.startSpan + delta);
 
-    var maxSpan = CELLS_PER_MEASURE - d.cellIdx;
+    var maxSpan = TOTAL_COLS - globalStart;
     newSpan = Math.min(newSpan, maxSpan);
 
-    for (var i = d.cellIdx + d.startSpan; i < d.cellIdx + newSpan; i++) {
-      if (cells[i] !== null) { newSpan = i - d.cellIdx; break; }
+    for (var i = globalStart + d.startSpan; i < globalStart + newSpan; i++) {
+      var c = getFlat(line, d.row, i);
+      if (c !== null) { newSpan = i - globalStart; break; }
     }
 
     if (newSpan < 1) newSpan = 1;
-    cells[d.cellIdx].span = newSpan;
 
-    for (var j = d.cellIdx + 1; j < d.cellIdx + newSpan; j++) {
-      cells[j] = null;
+    getFlat(line, d.row, globalStart).span = newSpan;
+
+    for (var j = globalStart + 1; j < globalStart + newSpan; j++) {
+      setFlat(line, d.row, j, null);
     }
-    for (var k = d.cellIdx + newSpan; k < d.cellIdx + d.startSpan; k++) {
-      cells[k] = null;
+    for (var k = globalStart + newSpan; k < globalStart + d.startSpan; k++) {
+      setFlat(line, d.row, k, null);
     }
 
     renderSheet();
