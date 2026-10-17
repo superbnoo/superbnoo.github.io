@@ -210,6 +210,51 @@
     pointer-events: none;
     z-index: 1;
   }
+
+  /* ============================================================
+     Mode bar & View title
+     ============================================================ */
+
+  .mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .mode-bar[hidden] { display: none; }
+
+  .view-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 32px;
+    text-align: center;
+    letter-spacing: -.01em;
+    padding: 8px 0 16px;
+    color: var(--ink);
+  }
+
+  .view-title[hidden] { display: none; }
+
+  /* ============================================================
+     View mode overrides
+     ============================================================ */
+
+  .view-mode #toolbar { display: none; }
+  .view-mode header p { display: none; }
+  .view-mode .cell { cursor: default; }
+  .view-mode .cell:hover { background: var(--surface-2); }
+  .view-mode .cell.has-note:hover { background: var(--surface); }
+  .view-mode .drag-handle { display: none; }
+  .view-mode .line-foot { display: none; }
+  .view-mode .popup { display: none !important; }
+  .view-mode .chord-input {
+    pointer-events: none;
+    border-bottom-color: transparent;
+    cursor: default;
+  }
+  .view-mode .chord-input:hover { border-bottom-color: transparent; }
+  .view-mode .chord-input:focus { border-bottom-color: transparent; }
 </style>
 </head>
 <body>
@@ -237,8 +282,16 @@
       <button class="btn" id="export-btn" type="button">Export JSON</button>
       <input type="file" id="import-file" accept=".json,application/json">
       <label class="btn" for="import-file">Import JSON</label>
+      <button class="btn primary" id="view-btn" type="button">View</button>
     </div>
   </div>
+
+  <div id="mode-bar" class="mode-bar" hidden>
+    <button class="btn" id="edit-btn" type="button">← Edit</button>
+    <button class="btn primary" id="print-btn" type="button">Print</button>
+  </div>
+
+  <div id="view-title" class="view-title" hidden></div>
 
   <div id="sheet"></div>
 
@@ -693,6 +746,171 @@
   function clearError() {
     if ($errorBanner) { $errorBanner.remove(); $errorBanner = null; }
   }
+
+  /* ---- View mode toggle ---- */
+
+  var viewMode = false;
+  var $modeBar = document.getElementById("mode-bar");
+  var $viewTitle = document.getElementById("view-title");
+
+  function setViewMode(on) {
+    viewMode = on;
+    if (on) {
+      hidePopup();
+      deselectCell();
+      document.body.classList.add("view-mode");
+      $modeBar.hidden = false;
+      $viewTitle.textContent = state.title || "Untitled";
+      $viewTitle.hidden = false;
+    } else {
+      document.body.classList.remove("view-mode");
+      $modeBar.hidden = true;
+      $viewTitle.hidden = true;
+    }
+  }
+
+  document.getElementById("view-btn").addEventListener("click", function () {
+    setViewMode(true);
+  });
+
+  document.getElementById("edit-btn").addEventListener("click", function () {
+    setViewMode(false);
+  });
+
+  /* ---- Print via hidden iframe ---- */
+
+  function buildPrintHTML() {
+    var title = state.title || "Untitled";
+    var css = [
+      '@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap");',
+      "@page { margin: 15mm; }",
+      "* { box-sizing: border-box; margin: 0; padding: 0; }",
+      "body { font-family: 'IBM Plex Sans', sans-serif; color: #131B24; background: #fff; }",
+      "h1 { font-family: 'IBM Plex Sans Condensed', sans-serif; font-weight: 700; font-size: 28px; text-align: center; margin-bottom: 18px; letter-spacing: -.01em; }",
+      ".line { margin-bottom: 16px; page-break-inside: avoid; }",
+      ".chord-row { display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px 0 0; }",
+      ".chord-label { font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; text-align: center; padding: 2px 8px; }",
+      ".note-row { display: grid; grid-template-columns: repeat(32, 1fr); min-height: 30px; }",
+      ".cell { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; border: 1px solid #D6DDE5; border-right: none; padding: 6px 0; text-align: left; position: relative; min-height: 30px; background: #fff; }",
+      ".cell:last-child { border-right: 1px solid #D6DDE5; }",
+      ".cell.measure-start { border-left: 2px solid #5C6B7A; }",
+      ".cell.has-note { background: #fff; }",
+      ".note-text { display: inline-block; text-align: center; }",
+      ".measure-divider { position: absolute; top: 0; bottom: 0; width: 1px; border-left: 1px dashed #5C6B7A; opacity: 0.5; }",
+      ".beat-row { display: grid; grid-template-columns: repeat(32, 1fr); }",
+      ".beat-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #5C6B7A; text-align: center; padding: 1px 0 5px; }",
+      ".beat-label.measure-start { border-left: 2px solid transparent; }"
+    ].join("\n");
+
+    var html = '<!doctype html><html><head><meta charset="utf-8"><style>' + css + '</style></head><body>';
+    html += '<h1>' + escapeHTML(title) + '</h1>';
+
+    state.lines.forEach(function (line) {
+      html += '<div class="line">';
+
+      // Chord row
+      html += '<div class="chord-row">';
+      line.measures.forEach(function (m) {
+        html += '<div class="chord-label">' + escapeHTML(m.chord || "\u2014") + '</div>';
+      });
+      html += '</div>';
+
+      // Treble + beats
+      html += buildPrintNoteRow(line, "treble");
+      html += buildPrintBeatRow();
+
+      // Bass + beats
+      html += buildPrintNoteRow(line, "bass");
+      html += buildPrintBeatRow();
+
+      html += '</div>';
+    });
+
+    html += '</body></html>';
+    return html;
+  }
+
+  function buildPrintNoteRow(line, row) {
+    var h = '<div class="note-row">';
+    for (var g = 0; g < TOTAL_COLS; g++) {
+      var cell = getFlat(line, row, g);
+      var mIdx = Math.floor(g / CELLS_PER_MEASURE);
+      var cIdx = g % CELLS_PER_MEASURE;
+
+      if (cell === null && g > 0) {
+        if (findSpanOwnerFlat(line, row, g) !== -1) continue;
+      }
+
+      var span = cell ? cell.span : 1;
+      var cls = "cell";
+      if (cell) cls += " has-note";
+      if (cIdx === 0 && mIdx > 0) cls += " measure-start";
+
+      h += '<div class="' + cls + '" style="grid-column:' + (g + 1) + '/span ' + span + '">';
+
+      if (cell) {
+        h += '<span class="note-text" style="width:' + (100 / span) + '%">' + escapeHTML(noteText(cell)) + '</span>';
+
+        if (span > 1) {
+          for (var offset = 1; offset < span; offset++) {
+            if ((g + offset) % CELLS_PER_MEASURE === 0) {
+              h += '<div class="measure-divider" style="left:' + ((offset / span) * 100) + '%"></div>';
+            }
+          }
+        }
+      }
+
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function buildPrintBeatRow() {
+    var h = '<div class="beat-row">';
+    for (var m = 0; m < MEASURES_PER_LINE; m++) {
+      for (var i = 0; i < CELLS_PER_MEASURE; i++) {
+        var cls = "beat-label";
+        if (i === 0 && m > 0) cls += " measure-start";
+        h += '<div class="' + cls + '" style="grid-column:' + (m * CELLS_PER_MEASURE + i + 1) + '">' + BEAT_LABELS[i] + '</div>';
+      }
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function escapeHTML(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  var printFrame = null;
+
+  function printSheet() {
+    if (!printFrame) {
+      printFrame = document.createElement("iframe");
+      printFrame.style.cssText = "position:absolute;width:0;height:0;border:none;left:-9999px;";
+      document.body.appendChild(printFrame);
+    }
+
+    var html = buildPrintHTML();
+    var doc = printFrame.contentDocument || printFrame.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    // Wait for fonts to load before printing
+    if (printFrame.contentWindow.document.fonts && printFrame.contentWindow.document.fonts.ready) {
+      printFrame.contentWindow.document.fonts.ready.then(function () {
+        printFrame.contentWindow.print();
+      });
+    } else {
+      setTimeout(function () {
+        printFrame.contentWindow.print();
+      }, 500);
+    }
+  }
+
+  document.getElementById("print-btn").addEventListener("click", printSheet);
 
   /* ---- Init ---- */
 
