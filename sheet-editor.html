@@ -783,9 +783,9 @@
     var title = state.title || "Untitled";
     var css = [
       '@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap");',
-      "@page { margin: 15mm; }",
+      "@page { margin: 0; }",
       "* { box-sizing: border-box; margin: 0; padding: 0; }",
-      "body { font-family: 'IBM Plex Sans', sans-serif; color: #131B24; background: #fff; }",
+      "body { font-family: 'IBM Plex Sans', sans-serif; color: #131B24; background: #fff; padding: 15mm; }",
       "h1 { font-family: 'IBM Plex Sans Condensed', sans-serif; font-weight: 700; font-size: 28px; text-align: center; margin-bottom: 18px; letter-spacing: -.01em; }",
       ".line { margin-bottom: 16px; page-break-inside: avoid; }",
       ".chord-row { display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px 0 0; }",
@@ -802,7 +802,7 @@
       ".beat-label.measure-start { border-left: 2px solid transparent; }"
     ].join("\n");
 
-    var html = '<!doctype html><html><head><meta charset="utf-8"><style>' + css + '</style></head><body>';
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title></title><style>' + css + '</style></head><body>';
     html += '<h1>' + escapeHTML(title) + '</h1>';
 
     state.lines.forEach(function (line) {
