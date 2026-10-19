@@ -132,8 +132,18 @@
 
   input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
+  #toolbar > *:not(:last-child) {
+    margin-bottom: 8px;
+  }
   #toolbar .actions .btn,
   #toolbar .actions label.btn {
+    padding: 9px 16px;
+    font-size: 13.5px;
+    line-height: 1;
+  }
+
+  #mode-bar .btn,
+  #mode-bar label.btn {
     padding: 9px 16px;
     font-size: 13.5px;
     line-height: 1;
@@ -282,9 +292,6 @@
   </header>
 
   <div class="panel" id="toolbar">
-    <div class="panel-head">
-      <span class="panel-label">Sheet</span>
-    </div>
     <div class="opts">
       <div class="field">
         <label for="title-input">Song title</label>
