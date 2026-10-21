@@ -207,6 +207,32 @@
   .popup-acc:hover { background: var(--a-tint); }
   .popup-acc.active { background: var(--a-tint); border-color: var(--a); color: var(--a); }
 
+  .popup-octave {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0 0;
+  }
+
+  .popup-octave-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .popup-octave-label span {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  #octave-slider {
+    flex: 1;
+    height: 4px;
+    cursor: pointer;
+    accent-color: var(--a);
+  }
+
   .drag-handle {
     position: absolute;
     top: 0;
@@ -324,6 +350,10 @@
       <button class="popup-acc" id="acc-sharp" type="button">♯</button>
       <button class="popup-acc" id="acc-flat" type="button">♭</button>
     </div>
+    <div class="popup-octave">
+      <label class="popup-octave-label" for="octave-slider">Octave <span id="octave-value">4</span></label>
+      <input type="range" id="octave-slider" min="1" max="8" value="4" step="1">
+    </div>
   </div>
 </div>
 
@@ -358,6 +388,7 @@
     var t = cell.note;
     if (cell.accidental === "sharp") t += "\u266F";
     if (cell.accidental === "flat") t += "\u266D";
+    t += cell.octave !== undefined ? cell.octave : 4;
     return t;
   }
 
@@ -610,7 +641,7 @@
     for (var g = r.startGlobal; g <= r.endGlobal; g++) {
       var cell = getFlat(line, r.row, g);
       if (cell) {
-        var copy = { note: cell.note, accidental: cell.accidental, span: cell.span };
+        var copy = { note: cell.note, accidental: cell.accidental, octave: cell.octave !== undefined ? cell.octave : 4, span: cell.span };
         // Truncate span if it extends beyond selection end
         if (g + copy.span - 1 > r.endGlobal) {
           copy.span = r.endGlobal - g + 1;
@@ -634,7 +665,7 @@
       if (targetG >= TOTAL_COLS) break;
       var src = clipboard[i];
       if (src) {
-        var copy = { note: src.note, accidental: src.accidental, span: src.span };
+        var copy = { note: src.note, accidental: src.accidental, octave: src.octave !== undefined ? src.octave : 4, span: src.span };
         // Truncate span if it would exceed the line
         if (targetG + copy.span > TOTAL_COLS) {
           copy.span = TOTAL_COLS - targetG;
@@ -720,12 +751,24 @@
   var NOTES = ["C", "D", "E", "F", "G", "A", "B"];
   var $popup = document.getElementById("popup");
   var $popupNotes = document.getElementById("popup-notes");
+  var $octaveSlider = document.getElementById("octave-slider");
+  var $octaveValue = document.getElementById("octave-value");
   var popupTarget = null;
   var popupAccidental = null;
+  var popupOctave = 4;
+
+  $octaveSlider.addEventListener("input", function (e) {
+    e.stopPropagation();
+    popupOctave = parseInt($octaveSlider.value, 10);
+    $octaveValue.textContent = popupOctave;
+  });
 
   function showPopup(cellEl, lineIdx, row, measureIdx, cellIdx) {
     popupTarget = { lineIdx: lineIdx, row: row, measureIdx: measureIdx, cellIdx: cellIdx };
     popupAccidental = null;
+    popupOctave = 4;
+    $octaveSlider.value = "4";
+    $octaveValue.textContent = "4";
     updateAccidentalButtons();
 
     $popupNotes.textContent = "";
@@ -759,7 +802,7 @@
     if (!popupTarget) return;
     var t = popupTarget;
     var cells = state.lines[t.lineIdx].measures[t.measureIdx][t.row];
-    cells[t.cellIdx] = { note: noteName, accidental: popupAccidental, span: 1 };
+    cells[t.cellIdx] = { note: noteName, accidental: popupAccidental, octave: popupOctave, span: 1 };
     hidePopup();
     renderSheet();
   }
@@ -1093,6 +1136,34 @@
       if (clipboard && selected) {
         e.preventDefault();
         pasteClipboard();
+      }
+    }
+    if ((e.key === "+" || e.key === "=" || e.key === "ArrowUp") && selected && !e.ctrlKey && !e.metaKey) {
+      var s = selected;
+      var line = state.lines[s.lineIdx];
+      var g = toGlobal(s.measureIdx, s.cellIdx);
+      var cell = getFlat(line, s.row, g);
+      if (cell) {
+        var oct = cell.octave !== undefined ? cell.octave : 4;
+        if (oct < 8) {
+          cell.octave = oct + 1;
+          renderSheet();
+          selectCell(s.lineIdx, s.row, s.measureIdx, s.cellIdx);
+        }
+      }
+    }
+    if ((e.key === "-" || e.key === "_" || e.key === "ArrowDown") && selected && !e.ctrlKey && !e.metaKey) {
+      var s2 = selected;
+      var line2 = state.lines[s2.lineIdx];
+      var g2 = toGlobal(s2.measureIdx, s2.cellIdx);
+      var cell2 = getFlat(line2, s2.row, g2);
+      if (cell2) {
+        var oct2 = cell2.octave !== undefined ? cell2.octave : 4;
+        if (oct2 > 1) {
+          cell2.octave = oct2 - 1;
+          renderSheet();
+          selectCell(s2.lineIdx, s2.row, s2.measureIdx, s2.cellIdx);
+        }
       }
     }
   });
