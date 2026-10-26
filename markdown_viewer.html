@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="main.css">
+<style>
+  /* ---------- edit view ---------- */
+
+  .editor-area {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 520px;
+    resize: vertical;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    tab-size: 4;
+    outline: none;
+    transition: border-color .15s ease;
+  }
+
+  textarea:focus { border-color: var(--focus); }
+
+  textarea::placeholder { color: var(--muted); opacity: .7; }
+
+  input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .file-info {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ---------- preview view ---------- */
+
+  .preview-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .preview-bar .spacer { flex: 1; }
+
+  .preview-bar .doc-title {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .01em;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .preview-content {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ---------- rendered markdown ---------- */
+
+  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+    font-family: var(--cond);
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 1.6em 0 .6em;
+    letter-spacing: -.01em;
+  }
+
+  .md h1 { font-size: 32px; margin-top: 0; }
+  .md h2 { font-size: 24px; border-bottom: 1px solid var(--line-soft); padding-bottom: 6px; }
+  .md h3 { font-size: 19px; }
+  .md h4 { font-size: 16px; }
+
+  .md p { margin: 0 0 1em; }
+
+  .md a { color: var(--a); text-decoration: underline; text-underline-offset: 2px; }
+  .md a:hover { filter: brightness(1.15); }
+
+  .md ul, .md ol { padding-left: 1.6em; margin: 0 0 1em; }
+  .md li { margin-bottom: .3em; }
+  .md li > ul, .md li > ol { margin-top: .3em; margin-bottom: 0; }
+
+  .md blockquote {
+    margin: 0 0 1em;
+    padding: 8px 16px;
+    border-left: 3px solid var(--a);
+    background: var(--a-tint);
+    color: var(--ink);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .md blockquote p:last-child { margin-bottom: 0; }
+
+  .md code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .md pre {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 1em;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre;
+    color: var(--ink);
+  }
+
+  .md pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  .md table {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-family: var(--sans);
+    margin: 0 0 1em;
+  }
+
+  .md th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: none;
+    letter-spacing: normal;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .md td {
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    font-size: 14px;
+  }
+
+  .md hr {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 2em 0;
+  }
+
+  .md img {
+    max-width: 100%;
+    border-radius: 4px;
+    margin: .5em 0;
+  }
+
+  .md input[type="checkbox"] {
+    margin-right: 6px;
+    position: relative;
+    top: 1px;
+  }
+
+  /* ---------- print styles ---------- */
+
+  @media print {
+    .preview-bar { display: none !important; }
+    .preview-content { padding: 0; max-width: none; }
+    body { background: #fff; color: #000; }
+    .md a { color: #000; }
+    .md pre, .md code { border-color: #ccc; }
+    .md blockquote { border-left-color: #888; background: #f4f4f4; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ EDIT VIEW ============ -->
+<div id="edit-view">
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Markdown preview</div>
+      <h1>Markdown Viewer</h1>
+      <p>Load a <code>.md</code> file or paste markdown into the editor, then press Preview to see the rendered output. From the preview you can print&nbsp;to&nbsp;PDF.</p>
+    </header>
+
+    <div class="actions">
+      <input type="file" id="file-input" accept=".md,.markdown,.txt,text/markdown,text/plain">
+      <label class="btn" for="file-input">Load .md file&hellip;</label>
+      <span class="file-info" id="file-info"></span>
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-preview" type="button">Preview</button>
+    </div>
+
+    <div class="editor-area">
+      <textarea id="editor" spellcheck="false" placeholder="Paste or type markdown here…"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PREVIEW VIEW ============ -->
+<div id="preview-view" hidden>
+  <div class="preview-bar">
+    <button class="btn" id="btn-back" type="button">← Back</button>
+    <span class="doc-title" id="doc-title"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="btn-print" type="button">Print / PDF</button>
+  </div>
+  <div class="preview-content md" id="preview-content"></div>
+</div>
+
+<!-- Marked.js for markdown parsing -->
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  var $editView    = document.getElementById("edit-view");
+  var $previewView = document.getElementById("preview-view");
+  var $editor      = document.getElementById("editor");
+  var $fileInput   = document.getElementById("file-input");
+  var $fileInfo    = document.getElementById("file-info");
+  var $preview     = document.getElementById("preview-content");
+  var $docTitle    = document.getElementById("doc-title");
+
+  var fileName = "";
+
+  /* ---------- marked config ---------- */
+
+  marked.setOptions({
+    gfm: true,
+    breaks: false
+  });
+
+  /* ---------- file loading ---------- */
+
+  $fileInput.addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    fileName = file.name;
+    $fileInfo.textContent = file.name + " (" + formatBytes(file.size) + ")";
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      $editor.value = reader.result;
+    };
+    reader.onerror = function () {
+      $fileInfo.textContent = "Could not read " + file.name;
+    };
+    reader.readAsText(file);
+  });
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  /* ---------- preview ---------- */
+
+  document.getElementById("btn-preview").addEventListener("click", function () {
+    var src = $editor.value;
+    if (!src.trim()) return;
+
+    var html = marked.parse(src);
+    $preview.innerHTML = html;
+
+    var title = fileName || extractTitle(src) || "Preview";
+    $docTitle.textContent = title;
+
+    $editView.hidden = true;
+    $previewView.hidden = false;
+    window.scrollTo(0, 0);
+  });
+
+  function extractTitle(md) {
+    var m = md.match(/^#{1,2}\s+(.+)/m);
+    return m ? m[1].trim() : "";
+  }
+
+  /* ---------- back ---------- */
+
+  document.getElementById("btn-back").addEventListener("click", function () {
+    $previewView.hidden = true;
+    $editView.hidden = false;
+  });
+
+  /* ---------- print ---------- */
+
+  document.getElementById("btn-print").addEventListener("click", function () {
+    window.print();
+  });
+
+})();
+</script>
+
+</body>
+</html>
